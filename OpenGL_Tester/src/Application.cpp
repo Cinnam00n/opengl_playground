@@ -6,6 +6,28 @@
 #include <string>
 #include <sstream>
 
+#define ASSERT(x) if (!(x)) __debugbreak();
+#define GLCall(x) GLClearError;\
+ x;\
+ ASSERT(GLLogCall(#x, __FILE__,__LINE__)) //GLCall() is basically a debugging function
+
+
+static void GLClearError()
+{
+    while (glGetError() != GL_NO_ERROR);
+}
+
+static bool GLLogCall(const char* function, const char* file, int line)
+{
+    while (GLenum error = glGetError())
+    {
+        std::cout << "[OpenGL Error] (" << error << "): " << function << " " 
+            << file << ":" << line << std::endl;
+        return false;
+    }
+    return true;
+}
+
 struct ShaderProgramSource
 {
     std::string VertexSource;
@@ -97,8 +119,9 @@ int main(void)
     if (!glfwInit())
         return -1;
 
-   
-
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
 
     /* Create a windowed mode window and its OpenGL context */
@@ -112,6 +135,9 @@ int main(void)
     /* Make the window's context current */
     glfwMakeContextCurrent(window);
 
+
+    glfwSwapInterval(1); // sync animation with refresh rate
+
     /* Make sure glew is initialized properly*/
     GLenum err = glewInit();
     if (err != GLEW_OK)
@@ -119,38 +145,81 @@ int main(void)
 
     std::cout << glGetString(GL_VERSION) << std::endl;
 
-    float positions[6] = {
-        -0.5f, -0.5f,
-         0.0f,  0.5f,
-         0.5f, -0.5f,
+    float positions[] = {
+        -0.5f, -0.5f, // 0
+         0.5f, -0.5f, // 1
+         0.5f,  0.5f, // 2
+        -0.5f,  0.5f  // 3
     };
+
+    unsigned int indices[] = {
+        0, 1, 2,
+        2, 3, 0
+    };
+
+    unsigned int vao; //vao links layout to the actively bound buffer
+    GLCall(glGenVertexArrays(1, &vao));
+    GLCall(glBindVertexArray(vao));
 
     unsigned int buffer;
     glGenBuffers(1, &buffer);
     glBindBuffer(GL_ARRAY_BUFFER, buffer);
-    glBufferData(GL_ARRAY_BUFFER, 6 * sizeof(float), positions, GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, 4 * 2 * sizeof(float), positions, GL_STATIC_DRAW);
 
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 2, GL_FLOAT, 0, sizeof(float) * 2, 0);
 
+    unsigned int ibo; //index buffer object
+    glGenBuffers(1, &ibo);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, 6 * sizeof(unsigned int), indices, GL_STATIC_DRAW);
+
     ShaderProgramSource source = ParseShader("res/shaders/Basic.shader");
-    std::cout << "Vertex" << std::endl;
-    std::cout << source.VertexSource << std::endl;
-    std::cout << "Fragment" << std::endl;
-    std::cout << source.FragmentSource << std::endl;
+
+    //check the shader code strings
+    //std::cout << "Vertex" << std::endl;
+    //std::cout << source.VertexSource << std::endl;
+    //std::cout << "Fragment" << std::endl;
+    //std::cout << source.FragmentSource << std::endl;
+
 
     unsigned int shader = CreateShader(source.VertexSource, source.FragmentSource);
-    glUseProgram(shader);
+    GLCall(glUseProgram(shader));
 
 
+    int location = glGetUniformLocation(shader, "u_Color");
+    ASSERT(location != -1);
+    GLCall(glUniform4f(location, 0.5f, 0.3f, 0.8f, 1.0f));
+
+    // Unbind all
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,0);
+    GLCall(glBindVertexArray(0));
+    glUseProgram(0);
+
+    float r = 0.0f;
+    float increment = 0.05f;
 
     /* Loop until the user closes the window */
     while (!glfwWindowShouldClose(window))
     {
         /* Render here */
         glClear(GL_COLOR_BUFFER_BIT);
+        
+        GLCall(glUseProgram(shader));
+        GLCall(glUniform4f(location, r, 0.3f, 0.8f, 1.0f)); // Uniform is set per draw
 
-        glDrawArrays(GL_TRIANGLES, 0, 3);
+        GLCall(glBindVertexArray(vao));
+        GLCall(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo));
+
+        GLCall(glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr));
+        
+        if (r > 1.0f)
+            increment = -0.05f;
+        else if (r < 0.0f)
+            increment = 0.05;
+
+        r += increment;
 
         /* Swap front and back buffers */
         glfwSwapBuffers(window);
@@ -163,4 +232,5 @@ int main(void)
 
     glfwTerminate();
     return 0;
+
 }
