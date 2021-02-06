@@ -145,12 +145,8 @@ int main(void)
     };
 
 
-    //vao links layout to the actively bound buffer. 
+    //va links layout to the actively bound buffer. 
     //linking occurs when glVertexAttribPointer is called 
-    unsigned int vao;
-    GLCall(glGenVertexArrays(1, &vao));
-    GLCall(glBindVertexArray(vao));
-
 
     VertexArray va;
     VertexBuffer vb(positions, 4 * 2 * sizeof(float));
